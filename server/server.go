@@ -1,7 +1,6 @@
 package main
 
 import (
-	//"bofio"//需要吗？
 	"fmt"
 	"log"
 	"net"
