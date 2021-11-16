@@ -16,7 +16,7 @@ limitations under the License.
 package cmd
 
 import (
-	"fmt"
+	"math/rand"
 	"net"
 	"time"
 
@@ -35,30 +35,32 @@ This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("run called")
-		// fmt.Println("Run: " + strings.Join(args, " "))
-		fmt.Printf("channel: %v, number: %v, message: %v", channel, number, message)
-		// 开启任务
 		run()
 	},
 }
-
-// Max size of the buffer of result channel.
-const MaxResult = 1000000
-const maxIdleConn = 500
-
 var (
 	// 并发数
 	conc int
-	// 信息数
-	number int
+	// 信息量
+	N int
 	// 信息内容
-	message string
+	msg string
 )
 
-type result struct {
-	startTime time.Time
-	endTime   time.Time
+
+type Report struct {
+	//测试开始时间
+	testStartTime time.Time
+	//测试结束时间
+	testEndTime time.Time
+	QPS int64
+	//已完成的请求数
+	n int
+	P50 time.Duration
+	P60 time.Duration
+	P70 time.Duration
+	P80 time.Duration
+	P90 time.Duration
 }
 
 func init() {
@@ -79,46 +81,65 @@ func init() {
 	runCmd.Flags().IntVarP(&conc, "concurrency", "c", 10, "Number of workers to run concurrently. Total number of requests cannot be smaller than the concurrency level. Default is 10.")
 
 	// 添加flag --number/-n type: int
-	runCmd.Flags().IntVarP(&number, "number", "n", 200, "The numbur of message to send. Default is 200.")
+	runCmd.Flags().IntVarP(&N, "number", "n", 200, "The numbur of message to send. Default is 200.")
 
 	// 添加flag --message/-s type: string (信息必须要有)
-	runCmd.Flags().StringVarP(&message, "message", "s", "", "The content of message (required)")
+	runCmd.Flags().StringVarP(&msg, "message", "s", "", "The content of message (required)")
 	runCmd.MarkFlagRequired("message")
 }
 
-func handleConnection(conn net.Conn) {
-	// 处理连接后关闭
-	defer conn.Close()
 
-	// 发送消息
-	_, err := conn.Write([]byte(message))
-	// 发送消息失败处理错误
-	if err != nil {
-		panic(err)
-	}
-	// 打印发送消息成功提示
-	fmt.Println("Send message success!")
+func (r *Report)work(worker int, quit chan bool)  {
+	timeOut := time.After(80 * time.Millisecond)//80ms连接不上就退出
+	go func() {
+		for i := 0; ; i++ {
+			select {
+			case <-quit:
+				return
+			case <- timeOut:
+				return
+			default:
+				// 创建拨号器来创建连接
+				conn, err := net.Dial("tcp", ":8081")
+				// 处理.Dial错误
+				if err != nil {
+					panic(err)
+				}
+				// 处理连接后关闭
+				defer conn.Close()
+				// 处理连接
+				_, err = conn.Write([]byte(msg))
+				// 发送消息失败处理错误
+				if err != nil {
+					panic(err)
+				}
+				r.n++
+				time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond) //休眠100ms
+			}
+		}
+	}()
 }
+
+
+
+
 
 func run() {
-	//创建信道
-	results := make(chan *result, min(conc*1000, maxIdleConn))
-	stopCh := make(chan struct{}, conc)
-
-	// 创建拨号器来创建客户端
-	conn, err := net.Dial("tcp", ":8081")
-	// 处理.Dial错误
-	if err != nil {
-		panic(err)
+	// 创建连接交给conc个工人做， 谁做的快就提交谁的报告
+	var r Report
+	quit := make(chan bool)
+	// 创建10个并发, 10个工人
+	for i := 0; i < conc; i++ {
+		r.work(i, quit)
 	}
 
-	handleConnection(conn)
+	for i := 0; i < N; i++ {
 
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
 	}
-	return b
+
+	quit <- true
 }
+
+
+
+
