@@ -53,9 +53,13 @@ type Report struct {
 	testStartTime time.Time
 	//测试结束时间
 	testEndTime time.Time
-	QPS int64
-	//已完成的请求数
+	//持续时间
+	duration time.Duration
+	//总请求数
+	N int
+	//请求成功数
 	n int
+	QPS int64
 	P50 time.Duration
 	P60 time.Duration
 	P70 time.Duration
@@ -89,7 +93,8 @@ func init() {
 }
 
 
-func (r *Report)work(worker int, quit chan bool)  {
+func (r *Report) work(worker int, quit chan bool){
+	r.N++
 	timeOut := time.After(80 * time.Millisecond)//80ms连接不上就退出
 	go func() {
 		for i := 0; ; i++ {
@@ -124,20 +129,22 @@ func (r *Report)work(worker int, quit chan bool)  {
 
 
 
-func run() {
+func  run() {
+	var r *Report
 	// 创建连接交给conc个工人做， 谁做的快就提交谁的报告
-	var r Report
+	r.testStartTime = time.Now()
 	quit := make(chan bool)
 	// 创建10个并发, 10个工人
 	for i := 0; i < conc; i++ {
 		r.work(i, quit)
 	}
 
-	for i := 0; i < N; i++ {
-
+	if r.N == N {
+		quit <- true
 	}
 
-	quit <- true
+	r.testEndTime = time.Now()
+
 }
 
 
