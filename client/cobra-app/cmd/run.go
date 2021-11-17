@@ -16,11 +16,11 @@ limitations under the License.
 package cmd
 
 import (
+	"fmt"
+	"github.com/spf13/cobra"
 	"math/rand"
 	"net"
 	"time"
-
-	"github.com/spf13/cobra"
 )
 
 // runCmd represents the run command
@@ -39,33 +39,10 @@ to quickly create a Cobra application.`,
 	},
 }
 var (
-	// 并发数
-	conc int
-	// 信息量
-	N int
-	// 信息内容
-	msg string
+	conc int    // 并发数
+	N    int    // 信息量
+	msg  string // 信息内容
 )
-
-
-type Report struct {
-	//测试开始时间
-	testStartTime time.Time
-	//测试结束时间
-	testEndTime time.Time
-	//持续时间
-	duration time.Duration
-	//总请求数
-	N int
-	//请求成功数
-	n int
-	QPS int64
-	P50 time.Duration
-	P60 time.Duration
-	P70 time.Duration
-	P80 time.Duration
-	P90 time.Duration
-}
 
 func init() {
 	rootCmd.AddCommand(runCmd)
@@ -85,68 +62,75 @@ func init() {
 	runCmd.Flags().IntVarP(&conc, "concurrency", "c", 10, "Number of workers to run concurrently. Total number of requests cannot be smaller than the concurrency level. Default is 10.")
 
 	// 添加flag --number/-n type: int
-	runCmd.Flags().IntVarP(&N, "number", "n", 200, "The numbur of message to send. Default is 200.")
+	runCmd.Flags().IntVarP(&N, "number", "n", 200, "The number of message to send. Default is 200.")
 
 	// 添加flag --message/-s type: string (信息必须要有)
 	runCmd.Flags().StringVarP(&msg, "message", "s", "", "The content of message (required)")
 	runCmd.MarkFlagRequired("message")
 }
 
-
-func (r *Report) work(worker int, quit chan bool){
-	r.N++
-	timeOut := time.After(80 * time.Millisecond)//80ms连接不上就退出
-	go func() {
-		for i := 0; ; i++ {
-			select {
-			case <-quit:
-				return
-			case <- timeOut:
-				return
-			default:
-				// 创建拨号器来创建连接
-				conn, err := net.Dial("tcp", ":8081")
-				// 处理.Dial错误
-				if err != nil {
-					panic(err)
-				}
-				// 处理连接后关闭
-				defer conn.Close()
-				// 处理连接
-				_, err = conn.Write([]byte(msg))
-				// 发送消息失败处理错误
-				if err != nil {
-					panic(err)
-				}
-				r.n++
-				time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond) //休眠100ms
-			}
-		}
-	}()
+type Work struct{
+	count int
+	testStartTime time.Time
+	testEndTime time.Time
+	QPS float64
+	P90 time.Duration
 }
 
-
-
-
-
-func  run() {
-	var r *Report
-	// 创建连接交给conc个工人做， 谁做的快就提交谁的报告
-	r.testStartTime = time.Now()
-	quit := make(chan bool)
-	// 创建10个并发, 10个工人
+func (w *Work) print() {
+	fmt.Printf("test start time: %v\n",w.testStartTime)
+	fmt.Printf("test end time: %v\n", w.testEndTime)
+	fmt.Printf("QPS : %v\n", w.QPS)
+	fmt.Printf("P90 : %v\n", w.P90)
+}
+func run() {
+	work := make(chan *Work)
 	for i := 0; i < conc; i++ {
-		r.work(i, quit)
+		go worker(i, work)
 	}
 
-	if r.N == N {
-		quit <- true
-	}
+	work <- new(Work)
+	first := <-work
+	first.testStartTime = time.Now()
+	work <- first
 
-	r.testEndTime = time.Now()
+	for {
+		select {
+		case check := <- work:
+			if check.count == int(0.9*float64(N)) { //抽样检查有可能得不到
+				check.P90 = time.Since(check.testStartTime)
+			}
+			if check.count >= N {
+				check.testEndTime = time.Now()
+				check.QPS = float64(check.testEndTime.Sub(check.testStartTime)) / float64(check.count)
+				check.print()
+				return
+			}
+			work <- check
+		}
+	}
 
 }
 
+func worker(i int, work chan *Work) {
+	for {
+		get := <-work //接收工作
+		// 拨号
+		dail()
+		get.count++
+		time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
+		work <- get //交接工作
+	}
+}
 
-
-
+func dail() {
+	conn, err := net.Dial("tcp", ":8081")
+	if err != nil {
+		panic(err)
+	}
+	defer conn.Close()
+	_, err = conn.Write([]byte(msg))
+	if err != nil {
+		panic(err)
+	}
+}
