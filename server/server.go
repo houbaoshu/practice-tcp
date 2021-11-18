@@ -2,45 +2,53 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"time"
 )
 
-// 处理连接
-func handleConnection(conn net.Conn) {
-	// 处理连接后关闭连接
-	defer conn.Close()
-	// 用一个长度为10的类型为byte的slice来接收消息
-	msg := make([]byte, 10)
-	// 从连接获得消息
-	_, err := conn.Read(msg)
-	// 处理.Read()错误
+type Log struct {str string}
+
+func main() {
+	ln, err := net.Listen("tcp", ":8081")
 	if err != nil {
-		fmt.Printf("Read() failed, err: %v\n", err)
+		panic(err)
 	}
-	//打印消息
-	log.Printf("recv %v msg, msgid: %v msg content: %v\n", conn.RemoteAddr(), time.Now().UnixNano(), string(msg))
+
+	// 处理连接
+	c := handleConnection(ln)
+
+	for {
+		s := <-c
+		fmt.Println(s.str)
+	}
 
 }
 
-func main() {
-	// 通过创建监听器来创建服务器，端口号为8081
-	ln, err := net.Listen("tcp", ":8081")
-	if err != nil {
-		// 处理.Listen()错误
-		fmt.Printf("Listen() failed, err: %v\n", err)
-	}
+func handleConnection(ln net.Listener) <-chan Log{
+	c := make(chan Log)
 
-	for {
-		// 通过监听器获得一个连接
-		conn, err := ln.Accept()
-		if err != nil {
-			// 处理.Accept()错误
-			fmt.Printf("Accept() failed, err: %v\n", err)
+	go func() {
+		for{
+			// 获取连接
+			conn, err := ln.Accept()
+			if err != nil {
+				panic(err)
+			}
+			// 关闭连接
+			defer conn.Close()
+			// 获取连接时间
+			t := time.Now()
+
+			msg := make([]byte, 10)
+			_, err = conn.Read(msg)
+			if err != nil {
+				panic(err)
+			}
+			c <- Log{fmt.Sprintf("[%d:%d:%d %d:%d:%d.%d] recv %v msg, msgid: %v, msg content: %v",
+				t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Minute(),t.Nanosecond() / 1e6, conn.RemoteAddr(),t.UnixNano(), string(msg))}
 		}
-		// 开一个协程处理连接
-		go handleConnection(conn)
-	}
+	}()
 
+
+	return c
 }

@@ -1,34 +1,51 @@
 package main
 
 import (
-	"fmt"
+	"math/rand"
 	"net"
+	"time"
 )
 
-func handleConnection(conn net.Conn) {
-	// 处理连接后关闭
-	defer conn.Close()
+type Work struct{ count int }
 
-	// 发送消息
-	_, err := conn.Write([]byte("hello tcp!"))
-	// 发送消息失败处理错误
-	if err != nil {
-		panic(err)
-	}
-	// 打印发送消息成功提示
-	fmt.Println("Send message success!")
-}
-func run() {
-	// 创建拨号器来创建客户端
-	conn, err := net.Dial("tcp", ":8081")
-	// 处理.Dial错误
-	if err != nil {
-		panic(err)
-	}
-
-	handleConnection(conn)
-
-}
 func main() {
-	run()
+	work := make(chan *Work)
+	for i := 0; i < 10; i++ {
+		go worker(i, work)
+	}
+
+	work <- new(Work)
+	for {
+		select {
+		case s:= <- work:
+			if s.count >= 100 {
+				return
+			}
+			work <- s
+		}
+	}
+	<-work
+}
+
+func worker(i int, work chan *Work) {
+	for {
+		get := <-work //接收工作
+		// 拨号
+		dail()
+		get.count++
+		time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
+		work <- get //交接工作
+	}
+}
+
+func dail() {
+	conn, err := net.Dial("tcp", ":8081")
+	if err != nil {
+		panic(err)
+	}
+	defer conn.Close()
+	_, err = conn.Write([]byte("msg"))
+	if err != nil {
+		panic(err)
+	}
 }
