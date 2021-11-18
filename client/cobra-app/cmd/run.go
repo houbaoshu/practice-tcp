@@ -18,6 +18,7 @@ package cmd
 import (
 	"fmt"
 	"github.com/spf13/cobra"
+	"math"
 	"math/rand"
 	"net"
 	"time"
@@ -78,10 +79,13 @@ type Work struct{
 }
 
 func (w *Work) print() {
-	fmt.Printf("test start time: %v\n",w.testStartTime)
-	fmt.Printf("test end time: %v\n", w.testEndTime)
-	fmt.Printf("QPS : %v\n", w.QPS)
-	fmt.Printf("P90 : %v\n", w.P90)
+	s := w.testStartTime
+	e := w.testEndTime
+	fmt.Printf("test start time: %v:%v:%v.%v\n",s.Hour(), s.Minute(), s.Second(), s.Nanosecond()/1e6)
+	fmt.Printf("test start time: %v:%v:%v.%v\n",e.Hour(), e.Minute(), e.Second(), e.Nanosecond()/1e6)
+	fmt.Printf("QPS : %v [#/sec]\n", w.QPS)
+	fmt.Println("Percentage the requests served with a certain time(ms)")
+	fmt.Printf("P90 : %v ms\n", w.P90.Milliseconds())
 }
 func run() {
 	work := make(chan *Work)
@@ -97,8 +101,8 @@ func run() {
 	for {
 		select {
 		case check := <- work:
-			if check.count == int(0.9*float64(N)) { //抽样检查有可能得不到
-				check.P90 = time.Since(check.testStartTime)
+			if  math.Abs(0.9 - float64(check.count)/float64(N)) < 0.02 { //抽样检查有可能得不到, time.Duration为空的概念没有？
+				check.P90  = time.Since(check.testStartTime)
 			}
 			if check.count >= N {
 				check.testEndTime = time.Now()
