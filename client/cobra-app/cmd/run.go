@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"github.com/spf13/cobra"
 	"math"
-	"math/rand"
 	"net"
 	"time"
 )
@@ -27,13 +26,8 @@ import (
 // runCmd represents the run command
 var runCmd = &cobra.Command{
 	Use:   "run",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "run the application",
+	Long: `This is a tcp client and the default port is 8081.`,
 	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		run()
@@ -60,10 +54,10 @@ func init() {
 
 	// 添加flag --concurrency/-c type: int
 	// Number of workers to run concurrently. Total number of requests cannot be smaller than the concurrency level. Default is 10.
-	runCmd.Flags().IntVarP(&conc, "concurrency", "c", 10, "Number of workers to run concurrently. Total number of requests cannot be smaller than the concurrency level. Default is 10.")
+	runCmd.Flags().IntVarP(&conc, "concurrency", "c", 10, "Number of workers to run concurrently. Total number of requests cannot be smaller than the concurrency level. ")
 
 	// 添加flag --number/-n type: int
-	runCmd.Flags().IntVarP(&N, "number", "n", 200, "The number of message to send. Default is 200.")
+	runCmd.Flags().IntVarP(&N, "number", "n", 200, "The number of message to send.")
 
 	// 添加flag --message/-s type: string (信息必须要有)
 	runCmd.Flags().StringVarP(&msg, "message", "s", "", "The content of message (required)")
@@ -83,7 +77,7 @@ func (w *Work) print() {
 	e := w.testEndTime
 	fmt.Printf("test start time: %v:%v:%v.%v\n",s.Hour(), s.Minute(), s.Second(), s.Nanosecond()/1e6)
 	fmt.Printf("test start time: %v:%v:%v.%v\n",e.Hour(), e.Minute(), e.Second(), e.Nanosecond()/1e6)
-	fmt.Printf("QPS : %v [#/sec]\n", w.QPS)
+	fmt.Printf("QPS : %v [#/sec]\n", int(w.QPS))
 	fmt.Println("Percentage the requests served with a certain time(ms)")
 	fmt.Printf("P90 : %v ms\n", w.P90.Milliseconds())
 }
@@ -106,7 +100,7 @@ func run() {
 			}
 			if check.count >= N {
 				check.testEndTime = time.Now()
-				check.QPS = float64(check.testEndTime.Sub(check.testStartTime)) / float64(check.count)
+				check.QPS = float64(check.count) / (check.testEndTime.Sub(check.testStartTime)).Seconds()
 				check.print()
 				return
 			}
@@ -122,7 +116,7 @@ func worker(i int, work chan *Work) {
 		// 拨号
 		dail()
 		get.count++
-		time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
+		//time.Sleep(time.Duration(rand.Intn(10)) * time.Millisecond)//一般为设为100ms 80ms 50 ms
 		work <- get //交接工作
 	}
 }
