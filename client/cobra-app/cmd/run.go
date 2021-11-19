@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"github.com/spf13/cobra"
 	"math"
-	"math/rand"
 	"net"
 	"time"
 )
@@ -117,7 +116,7 @@ func worker(i int, work chan *Work) {
 		// 拨号
 		dail()
 		get.count++
-		time.Sleep(time.Duration(rand.Intn(10)) * time.Millisecond)//
+		//time.Sleep(time.Duration(rand.Intn(10)) * time.Millisecond)//一般为设为100ms 80ms 50 ms
 		work <- get //交接工作
 	}
 }
